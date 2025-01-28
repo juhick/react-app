@@ -1,10 +1,6 @@
-import axios, { CanceledError } from "axios";
 import { useEffect, useState } from "react";
-
-interface User {
-  id: number;
-  name: string;
-}
+import { CanceledError } from "./services/api-client";
+import userService, { User } from "./services/user-service";
 
 function App() {
   const [users, setUsers] = useState<User[]>([]);
@@ -12,14 +8,11 @@ function App() {
   const [isLoading, setLoading] = useState(false);
 
   useEffect(() => {
-    const controller = new AbortController();
-
     setLoading(true);
 
-    axios
-      .get<User[]>("https://jsonplaceholder.typicode.com/users", {
-        signal: controller.signal,
-      })
+    const { request, cancel } = userService.getAllUsers();
+
+    request
       .then((res) => {
         setUsers(res.data);
         setLoading(false);
@@ -31,20 +24,17 @@ function App() {
         setError(err.message);
         setLoading(false);
       });
-
-    return () => controller.abort();
+    return () => cancel();
   }, []);
 
   const deleteUser = (user: User) => {
     const originalUsers = [...users];
     setUsers((users) => users.filter((u) => u.id !== user.id));
 
-    axios
-      .delete(`https://jsonplaceholder.typicode.com/users/${user.id}`)
-      .catch((err) => {
-        setError(err.message);
-        setUsers(originalUsers);
-      });
+    userService.deleteUser(user.id).catch((err) => {
+      setError(err.message);
+      setUsers(originalUsers);
+    });
   };
 
   const addUser = () => {
@@ -52,15 +42,26 @@ function App() {
     const newUser = { id: users.length + 1, name: "qhq" + users.length };
     setUsers([...users, newUser]);
 
-    axios
-      .post("https://jsonplaceholder.typicode.com/xusers", newUser)
+    userService
+      .addUser(newUser)
       .then(({ data: savedUser }) => {
-        setUsers([...originalUsers, savedUser]);
+        setUsers([...users, savedUser]);
       })
       .catch((err) => {
         setError(err.message);
         setUsers(originalUsers);
       });
+  };
+
+  const updateUser = (user: User) => {
+    const originalUsers = [...users];
+    const updatedUser = { ...user, name: user.name + " updated" };
+    setUsers((users) => users.map((u) => (u.id === user.id ? updatedUser : u)));
+
+    userService.updateUser(user.id, updatedUser).catch((err) => {
+      setError(err.message);
+      setUsers(originalUsers);
+    });
   };
 
   return (
@@ -78,7 +79,12 @@ function App() {
           >
             {user.name}
             <div>
-              <button className="btn btn-outline-secondary">Update</button>{" "}
+              <button
+                className="btn btn-outline-secondary mx-1"
+                onClick={() => updateUser(user)}
+              >
+                Update
+              </button>
               <button
                 className="btn btn-outline-danger"
                 onClick={() => deleteUser(user)}
